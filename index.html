@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CCS Track & Field Attendance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --maroon:#6E1423; --maroon-deep:#3F0A13; --gold:#E9B63B; --gold-soft:#F6DFA4;
+  --clay:#B8472A; --ink:#231417; --muted:#7A6266; --line:#E7D9DB;
+  --bg:#FBF8F7; --surface:#FFFFFF; --lane:#F3E9EA;
+  --present:#1F7A4C; --late:#C98A0B; --absent:#B3261E; --excused:#3A5BA8;
+  --display:"Big Shoulders Display","Arial Narrow",Impact,sans-serif;
+  --body:"Barlow","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ink:#F5EAEB; --muted:#B79EA2; --line:#4A2A30; --bg:#1B0B0E; 
+    --surface:#27131A; --lane:#321820; --gold-soft:#5A4413;
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#F5EAEB; --muted:#B79EA2; --line:#4A2A30; --bg:#1B0B0E;
+  --surface:#27131A; --lane:#321820; --gold-soft:#5A4413;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+
+/* ---------- Scoreboard header ---------- */
+.board{
+  background:var(--maroon-deep);color:#fff;position:relative;overflow:hidden;
+  padding:18px 18px 0;
+}
+.board::before{ /* curved track lanes */
+  content:"";position:absolute;right:-120px;top:-150px;width:420px;height:420px;border-radius:50%;
+  background:repeating-radial-gradient(circle,transparent 0 26px,rgba(233,182,59,.22) 26px 28px);
+  pointer-events:none;
+}
+.board-inner{max-width:880px;margin:0 auto;position:relative}
+.org{display:flex;align-items:center;gap:10px;font-weight:600;font-size:14px;color:var(--gold-soft)}
+.org b{color:var(--gold);font-family:var(--display);font-size:20px;letter-spacing:.02em}
+.day-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:14px 0 16px;flex-wrap:wrap}
+.day-hero h1{
+  font-family:var(--display);font-weight:900;margin:0;line-height:.82;
+  font-size:clamp(64px,18vw,128px);color:var(--gold);
+}
+.day-hero h1 small{display:block;font-size:.3em;color:#fff;font-weight:700;line-height:1.1;margin-bottom:6px}
+.clock{font-family:var(--display);font-weight:600;font-size:22px;color:#fff;opacity:.85;text-align:right}
+.clock span{display:block;font-family:var(--body);font-size:13px;opacity:.75;font-weight:500}
+
+/* session switch */
+.session{display:grid;grid-template-columns:1fr 1fr;gap:0;background:rgba(255,255,255,.08);border-radius:14px 14px 0 0;padding:6px 6px 0}
+.session button{
+  border:0;background:transparent;color:#fff;padding:12px 10px 14px;border-radius:10px 10px 0 0;
+  font-family:var(--display);font-weight:800;font-size:22px;display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.session button[aria-pressed="true"]{background:var(--bg);color:var(--maroon)}
+:root[data-theme="dark"] .session button[aria-pressed="true"]{color:var(--gold)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .session button[aria-pressed="true"]{color:var(--gold)}}
+.session button{white-space:nowrap}
+@media (max-width:420px){.session button{font-size:19px;gap:6px}.session small{display:none}}
+.session small{font-family:var(--body);font-size:12px;font-weight:600;opacity:.7}
+
+/* ---------- main ---------- */
+main{max-width:880px;margin:0 auto;padding:16px 16px 120px}
+
+/* date lane strip */
+.days{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 12px;scrollbar-width:none}
+.days::-webkit-scrollbar{display:none}
+.day{
+  flex:0 0 auto;min-width:64px;border:1.5px solid var(--line);background:var(--surface);border-radius:12px;
+  padding:6px 8px 8px;text-align:center;position:relative
+}
+.day .n{font-size:11px;color:var(--muted);font-weight:600}
+.day .d{font-family:var(--display);font-weight:800;font-size:28px;line-height:1}
+.day .w{font-size:12px;font-weight:600;color:var(--muted)}
+.day .dots{display:flex;gap:4px;justify-content:center;margin-top:5px}
+.day .dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}
+.day .dots i.done{background:var(--present)}
+.day[aria-current="true"]{background:var(--maroon);border-color:var(--maroon);color:#fff}
+.day[aria-current="true"] .n,.day[aria-current="true"] .w{color:var(--gold-soft)}
+.day.today::after{content:"Today";position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:var(--maroon-deep);font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px}
+
+/* division tabs */
+.division{display:flex;gap:10px;margin:6px 0 14px}
+.division button{
+  flex:1;border:2px solid var(--line);background:var(--surface);border-radius:14px;padding:10px 14px;text-align:left;
+  display:flex;justify-content:space-between;align-items:center
+}
+.division b{font-family:var(--display);font-size:24px;font-weight:800}
+.division span{white-space:nowrap;font-size:13px;color:var(--muted);font-weight:600}
+.division button[aria-pressed="true"]{border-color:var(--maroon);box-shadow:inset 0 -5px 0 var(--gold)}
+
+/* tally */
+.tally{display:grid;grid-template-columns:repeat(5,1fr);border:1.5px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden;margin-bottom:12px}
+.tally div{padding:8px 4px;text-align:center;border-right:1px solid var(--line)}
+.tally div:last-child{border-right:0}
+.tally b{display:block;font-family:var(--display);font-size:28px;font-weight:800;line-height:1}
+.tally span{font-size:12px;color:var(--muted);font-weight:600}
+.t-p b{color:var(--present)}.t-l b{color:var(--late)}.t-a b{color:var(--absent)}.t-e b{color:var(--excused)}
+
+.tools{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.tools input{flex:1 1 180px;min-width:0;border:1.5px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 12px;font:inherit;color:var(--ink)}
+.btn{border:1.5px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 12px;font-weight:600;font-size:14px}
+.btn.primary{background:var(--maroon);border-color:var(--maroon);color:#fff}
+.btn.lock[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:var(--maroon-deep)}
+
+.locked-note{display:none;background:var(--gold-soft);color:var(--ink);border-radius:10px;padding:10px 12px;font-size:14px;font-weight:600;margin-bottom:12px}
+.is-locked .locked-note{display:block}
+
+/* ---------- athlete lanes ---------- */
+.roster{list-style:none;margin:0;padding:0;counter-reset:lane}
+.athlete{
+  display:grid;grid-template-columns:52px 1fr auto;align-items:center;gap:12px;
+  padding:10px 10px 10px 0;border-bottom:2px solid var(--surface);
+  background:linear-gradient(90deg,var(--lane),var(--lane)) left/100% 100% no-repeat;
+  border-radius:0 12px 12px 0;margin-bottom:6px;position:relative
+}
+.bib{
+  height:52px;display:grid;place-items:center;background:var(--surface);border:2px solid var(--maroon);
+  border-left:0;border-radius:0 10px 10px 0;font-family:var(--display);font-weight:900;font-size:24px;color:var(--maroon);position:relative
+}
+.bib::before,.bib::after{content:"";position:absolute;width:5px;height:5px;border-radius:50%;background:var(--muted);right:5px}
+.bib::before{top:5px}.bib::after{bottom:5px}
+.who{min-width:0}
+.who .name{font-weight:700;font-size:16px;line-height:1.2}
+.who .ev{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.who .ev em{font-style:normal;font-size:11px;font-weight:600;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:0 5px;background:var(--surface)}
+.who .stamp{font-size:11px;color:var(--muted);margin-top:3px}
+.marks{display:flex;gap:4px}
+.marks button{
+  width:38px;height:38px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);
+  font-family:var(--display);font-weight:800;font-size:18px;color:var(--muted)
+}
+.marks button[aria-pressed="true"]{color:#fff}
+.marks .m-P[aria-pressed="true"]{background:var(--present);border-color:var(--present)}
+.marks .m-L[aria-pressed="true"]{background:var(--late);border-color:var(--late)}
+.marks .m-A[aria-pressed="true"]{background:var(--absent);border-color:var(--absent)}
+.marks .m-E[aria-pressed="true"]{background:var(--excused);border-color:var(--excused)}
+.athlete[data-s="P"]{background-image:linear-gradient(90deg,color-mix(in srgb,var(--present) 16%,var(--lane)),var(--lane) 70%)}
+.athlete[data-s="A"]{background-image:linear-gradient(90deg,color-mix(in srgb,var(--absent) 14%,var(--lane)),var(--lane) 70%)}
+.athlete[data-s="L"]{background-image:linear-gradient(90deg,color-mix(in srgb,var(--late) 16%,var(--lane)),var(--lane) 70%)}
+.athlete[data-s="E"]{background-image:linear-gradient(90deg,color-mix(in srgb,var(--excused) 14%,var(--lane)),var(--lane) 70%)}
+.is-locked .marks button{opacity:.55;pointer-events:none}
+.flash{animation:flash .35s ease}
+@keyframes flash{from{transform:translateX(6px)}to{transform:none}}
+@media (prefers-reduced-motion:reduce){.flash{animation:none}}
+.empty{padding:24px;text-align:center;color:var(--muted)}
+
+@media (max-width:520px){
+  .athlete{grid-template-columns:44px 1fr;row-gap:8px}
+  .bib{height:44px;font-size:20px}
+  .marks{grid-column:2;justify-content:flex-start}
+  .marks button{width:44px;height:36px}
+}
+
+/* sync chip + login */
+.org{justify-content:space-between;flex-wrap:wrap}
+.sync{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#fff;background:rgba(255,255,255,.12);padding:4px 10px;border-radius:999px}
+.sync i{width:8px;height:8px;border-radius:50%;background:#9aa}
+.sync[data-st="ok"] i{background:#3DDC84}.sync[data-st="busy"] i{background:var(--gold)}
+.sync[data-st="off"] i{background:#FF6B5E}.sync[data-st="local"] i{background:#9aa}
+.gate{position:fixed;inset:0;z-index:50;background:var(--maroon-deep);display:none;place-items:center;padding:24px}
+.need-login .gate{display:grid}
+.gate form{width:100%;max-width:360px;background:var(--surface);color:var(--ink);border-radius:18px;padding:24px;border-top:6px solid var(--gold)}
+.gate h2{font-family:var(--display);font-size:34px;font-weight:900;margin:0 0 4px;color:var(--maroon);line-height:1}
+.gate p{margin:0 0 16px;color:var(--muted);font-size:14px}
+.gate label{display:block;font-size:13px;font-weight:600;margin:10px 0 4px}
+.gate input{width:100%;border:1.5px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:11px 12px;font:inherit}
+.gate button{width:100%;margin-top:16px;padding:12px}
+.gate .err{color:var(--absent);font-size:13px;font-weight:600;min-height:18px;margin-top:10px}
+
+/* category headers */
+.cat{display:flex;align-items:baseline;gap:10px;margin:18px 0 8px;padding-bottom:4px;border-bottom:3px solid var(--maroon)}
+.cat:first-child{margin-top:4px}
+.cat b{font-family:var(--display);font-size:26px;font-weight:800;color:var(--maroon)}
+:root[data-theme="dark"] .cat b{color:var(--gold)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .cat b{color:var(--gold)}}
+.cat span{font-size:13px;color:var(--muted);font-weight:600}
+tr.cat-row td{text-align:left;font-family:var(--display);font-weight:800;font-size:15px;background:var(--lane);color:var(--maroon);padding-left:10px}
+.exports{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+.exports .btn{display:flex;align-items:center;gap:6px}
+.x-xls{background:#1D6F42;border-color:#1D6F42;color:#fff}
+.x-doc{background:#2B579A;border-color:#2B579A;color:#fff}
+
+/* ---------- summary ---------- */
+.view-switch{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));
+  display:flex;background:var(--maroon-deep);border-radius:999px;padding:5px;gap:4px;box-shadow:0 8px 24px rgba(63,10,19,.35);z-index:10}
+.view-switch button{border:0;background:transparent;color:#fff;padding:9px 18px;border-radius:999px;font-weight:700;font-size:14px}
+.view-switch button[aria-pressed="true"]{background:var(--gold);color:var(--maroon-deep)}
+#summary{display:none}
+.show-summary #mark{display:none}.show-summary #summary{display:block}
+.show-summary .session{visibility:hidden}
+.sum-wrap{overflow-x:auto;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);margin-bottom:18px}
+table{border-collapse:collapse;font-size:13px;min-width:100%}
+th,td{border-bottom:1px solid var(--line);padding:6px 5px;text-align:center;white-space:nowrap}
+th{font-weight:700;color:var(--muted);font-size:11px}
+td.nm,th.nm{text-align:left;position:sticky;left:0;background:var(--surface);padding-left:10px;font-weight:600;font-size:13px}
+th.dh{font-family:var(--display);font-size:15px;color:var(--ink);border-left:1px solid var(--line)}
+td.c{font-family:var(--display);font-weight:800;font-size:15px;width:26px}
+td.c.am{border-left:1px solid var(--line)}
+.c-P{color:var(--present)}.c-L{color:var(--late)}.c-A{color:var(--absent)}.c-E{color:var(--excused)}
+.sum-h{font-family:var(--display);font-size:28px;font-weight:800;margin:8px 0}
+.legend{font-size:13px;color:var(--muted);margin:0 0 14px}
+.legend b{font-family:var(--display);font-size:15px}
+
+@media print{
+  .board,.view-switch,.tools,#mark,.days,.division,.exports{display:none!important}
+  #summary{display:block!important} body{background:#fff;color:#000}
+  .sum-wrap{overflow:visible;border:0} td.nm,th.nm{position:static}
+  .print-title{display:block!important}
+}
+.print-title{display:none;font-family:var(--display);font-size:22px;font-weight:800}
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <form id="loginForm">
+    <h2>Sign in</h2>
+    <p>Attendance is saved online. Use the admin account.</p>
+    <label for="email">Email</label><input id="email" type="email" autocomplete="username" required>
+    <label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password" required>
+    <button class="btn primary" type="submit" id="loginBtn">Sign in</button>
+    <div class="err" id="loginErr"></div>
+  </form>
+</div>
+<header class="board">
+  <div class="board-inner">
+    <div class="org"><span><b>CCS</b> College Days 2026 · Track &amp; Field Team Attendance</span><span class="sync" id="sync" data-st="local"><i></i><span id="syncText">Local only</span></span></div>
+    <div class="day-hero">
+      <h1 id="heroDay"><small id="heroSub">Day 1 of 8</small>SEP 29</h1>
+      <div class="clock" id="clock">--:--<span>Trinidad Municipal College</span></div>
+    </div>
+    <div class="session" role="group" aria-label="Session">
+      <button id="btnAM" aria-pressed="true">☀️ Morning <small>AM</small></button>
+      <button id="btnPM" aria-pressed="false">🌇 Afternoon <small>PM</small></button>
+    </div>
+  </div>
+</header>
+
+<main id="app">
+  <nav class="days" id="days" aria-label="Training days"></nav>
+
+  <section id="mark">
+    <div class="division" role="group" aria-label="Division">
+      <button id="divM" aria-pressed="true"><b>Men</b><span id="cntM"></span></button>
+      <button id="divW" aria-pressed="false"><b>Women</b><span id="cntW"></span></button>
+    </div>
+
+    <div class="tally" id="tally"></div>
+
+    <div class="tools">
+      <input id="search" type="search" placeholder="Search athlete or event" aria-label="Search athlete or event">
+      <button class="btn primary" id="allPresent">Mark rest present</button>
+      <button class="btn lock" id="lockBtn" aria-pressed="false">Lock session</button>
+    </div>
+    <div class="locked-note">This session is locked. Unlock it to change any mark.</div>
+
+    <div id="roster"></div>
+  </section>
+
+  <section id="summary">
+    <div class="exports">
+      <button class="btn x-xls" id="expXls">⬇ Excel (.xlsx)</button>
+      <button class="btn x-doc" id="expDoc">⬇ Word (.doc)</button>
+      <button class="btn" onclick="window.print()">Print</button>
+      <button class="btn" id="backupBtn">💾 Backup</button>
+      <button class="btn" id="restoreBtn">↺ Restore</button>
+      <button class="btn" id="signOutBtn" hidden>Sign out</button>
+      <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+    </div>
+    <p class="legend" id="backupNote"></p>
+    <p class="legend"><b class="c-P">P</b> Present &nbsp; <b class="c-L">L</b> Late &nbsp; <b class="c-A">A</b> Absent &nbsp; <b class="c-E">E</b> Excused</p>
+    <div class="print-title">CCS Track &amp; Field Attendance · Sep 29 – Oct 6, 2026</div>
+    <div id="sumBody"></div>
+  </section>
+</main>
+
+<div class="view-switch" role="group" aria-label="View">
+  <button id="vMark" aria-pressed="true">Mark</button>
+  <button id="vSum" aria-pressed="false">Summary</button>
+</div>
+
+<script src="config.js"></script>
+<script src="vendor/supabase.js"></script>
+<script src="vendor/exceljs.min.js"></script>
+<script>
+/* ---------- Roster from Track_Field_CSS_Athletes.docx (doc order) ---------- */
+const CATS = ["Running","Jumping","Throwing"];
+const RAW = {
+  M: {
+    Running: [
+      ["Mark Angelou Mahusay",["100m","4x100m"]], ["Dave Nayre",["100m","4x100m"]],
+      ["John Quilian Tecson",["200m","4x100m"]], ["John Vincent Sanjorjo",["200m","4x100m"]],
+      ["Crencia Fretch Gerald",["400m","4x400m"]], ["Bryan Ore",["400m","4x400m"]],
+      ["John Floyd Odiongan",["800m","4x400m"]], ["Mico Pinedo",["800m","4x400m"]],
+      ["Joshua Gabriel Garcia",["1500m"]], ["Vincent Gabriel Sebello",["1500m"]],
+      ["Arnel Camlasan",["3000m"]], ["Icy Magcosta",["3000m"]],
+      ["John Kian Empis",["5000m"]], ["Aaron John Cadungon",["5000m"]],
+      ["John Michael Valles",["4x100m (R)","4x400m (R)"]]
+    ],
+    Jumping: [
+      ["Michael Derije",["High jump","Long jump","Triple jump"]], ["Joshua Bañados",["High jump"]],
+      ["Clyde Art Maquilang",["High jump (R)"]], ["Jhayem Cuysona",["Long jump","Triple jump"]],
+      ["John Ray Tenio",["Long jump (R)","Triple jump (R)"]]
+    ],
+    Throwing: [
+      ["Rolando Aumentado",["Discus","Javelin","Shot put"]], ["Elmar Riambonanza",["Discus"]],
+      ["Christian Lee Degamo",["Discus"]], ["John Michael Zapanta",["Javelin","Shot put"]],
+      ["Kiven Jay Litub",["Javelin"]], ["Mike Crisostome Romero",["Shot put"]]
+    ]
+  },
+  W: {
+    Running: [
+      ["Allea M. Legaspi",["100m","4x100m"]], ["Katrina Fornis",["200m","4x100m"]],
+      ["Jannylyn Tongco",["400m","4x100m"]], ["Michelle Dajalos",["800m","4x400m"]],
+      ["Jezreal May D. Lacierda",["1500m","4x400m"]], ["Syra Faye Torrejos",["3000m","4x400m"]],
+      ["Christine Mae Cuyacot",["5000m","4x400m"]], ["Jade Collin Opalla",["4x100m"]]
+    ],
+    Jumping: [
+      ["Shaira Nicole Jugarap",["High jump","Long jump","Javelin"]], ["Mary Ann Dungog",["High jump","Long jump"]],
+      ["Andrea Divine Bon",["Triple jump"]]
+    ],
+    Throwing: [
+      ["Hassrina Batuampar",["Discus","Javelin"]], ["Lorecel Perocho Maluenda",["Shot put"]]
+    ]
+  }
+};
+// Numbering starts at 1 in every category
+const ROSTER = {M:[],W:[]};
+for (const g of ["M","W"]) for (const c of CATS)
+  RAW[g][c].forEach(([name,ev],i)=> ROSTER[g].push({name, ev, cat:c, bib:i+1, id:g+":"+name}));
+
+/* ---------- Dates: Sep 29 – Oct 6, 2026 ---------- */
+const DAYS = [];
+for (let i=0;i<8;i++){ const d=new Date(2026,8,29+i); DAYS.push(d); }
+const key = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const MON = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+const WK = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+/* ---------- State ---------- */
+const STORE = "ccs-tf-attendance-v1";
+let data = { marks:{}, locks:{} };
+try { const s = localStorage.getItem(STORE); if (s) data = Object.assign(data, JSON.parse(s)); } catch(e){}
+const save = () => { try { localStorage.setItem(STORE, JSON.stringify(data)); } catch(e){} };
+
+const todayKey = key(new Date());
+let dayIdx = Math.max(0, DAYS.findIndex(d=>key(d)===todayKey));
+let sess = new Date().getHours() >= 12 ? "PM" : "AM";
+let div = "M", query = "";
+
+const sk = () => key(DAYS[dayIdx])+"|"+sess;
+const getMark = (id, k=sk()) => (data.marks[k]||{})[id];
+
+/* ---------- Render ---------- */
+const $ = id => document.getElementById(id);
+
+function renderHeader(){
+  const d = DAYS[dayIdx];
+  $("heroDay").innerHTML = `<small>Day ${dayIdx+1} of 8 · ${WK[d.getDay()]}</small>${MON[d.getMonth()]} ${d.getDate()}`;
+  $("btnAM").setAttribute("aria-pressed", sess==="AM");
+  $("btnPM").setAttribute("aria-pressed", sess==="PM");
+}
+function renderDays(){
+  $("days").innerHTML = DAYS.map((d,i)=>{
+    const k = key(d);
+    const done = s => { const m = data.marks[k+"|"+s]||{}; return Object.keys(m).length >= ROSTER.M.length+ROSTER.W.length; };
+    return `<button class="day ${k===todayKey?"today":""}" aria-current="${i===dayIdx}" data-i="${i}">
+      <div class="n">Day ${i+1}</div><div class="d">${d.getDate()}</div><div class="w">${WK[d.getDay()]} · ${MON[d.getMonth()].slice(0,3)}</div>
+      <div class="dots"><i class="${done("AM")?"done":""}" title="Morning"></i><i class="${done("PM")?"done":""}" title="Afternoon"></i></div></button>`;
+  }).join("");
+}
+function renderTally(){
+  const list = ROSTER[div];
+  const c = {P:0,L:0,A:0,E:0};
+  list.forEach(a=>{ const m=getMark(a.id); if(m) c[m.s]++; });
+  const un = list.length - c.P - c.L - c.A - c.E;
+  $("tally").innerHTML = `
+    <div class="t-p"><b>${c.P}</b><span>Present</span></div>
+    <div class="t-l"><b>${c.L}</b><span>Late</span></div>
+    <div class="t-a"><b>${c.A}</b><span>Absent</span></div>
+    <div class="t-e"><b>${c.E}</b><span>Excused</span></div>
+    <div><b>${un}</b><span>Unmarked</span></div>`;
+  $("cntM").textContent = ROSTER.M.length + " athletes";
+  $("cntW").textContent = ROSTER.W.length + " athletes";
+  $("divM").setAttribute("aria-pressed", div==="M");
+  $("divW").setAttribute("aria-pressed", div==="W");
+}
+function renderRoster(){
+  const q = query.toLowerCase();
+  const list = ROSTER[div].filter(a => !q || a.name.toLowerCase().includes(q) || a.ev.join(" ").toLowerCase().includes(q));
+  const locked = !!data.locks[sk()];
+  $("app").classList.toggle("is-locked", locked);
+  $("lockBtn").setAttribute("aria-pressed", locked);
+  $("lockBtn").textContent = locked ? "Unlock session" : "Lock session";
+  if (!list.length){ $("roster").innerHTML = `<p class="empty">No athlete matches “${query}”. Clear the search to see everyone.</p>`; return; }
+  const labels = {P:"Present",L:"Late",A:"Absent",E:"Excused"};
+  $("roster").innerHTML = CATS.map(c=>{
+    const rows = list.filter(a=>a.cat===c); if(!rows.length) return "";
+    return `<div class="cat"><b>${c}</b><span>${rows.length} athlete${rows.length>1?"s":""}</span></div><ol class="roster">`+
+    rows.map(a=>{
+      const m = getMark(a.id); const s = m ? m.s : "";
+      return `<li class="athlete" data-s="${s}" data-id="${a.id}">
+        <div class="bib">${a.bib}</div>
+        <div class="who"><div class="name">${a.name}</div>
+          <div class="ev">${a.ev.map(e=>`<em>${e}</em>`).join("")}</div>
+          ${m?`<div class="stamp">${labels[m.s]} · ${m.t}</div>`:""}</div>
+        <div class="marks">${["P","L","A","E"].map(x=>`<button class="m-${x}" data-m="${x}" aria-pressed="${s===x}" aria-label="${labels[x]}: ${a.name}" title="${labels[x]}">${x}</button>`).join("")}</div>
+      </li>`;
+    }).join("")+`</ol>`;
+  }).join("");
+}
+function renderSummary(){
+  let html = "";
+  for (const g of ["M","W"]){
+    html += `<h2 class="sum-h">${g==="M"?"Men":"Women"}</h2><div class="sum-wrap"><table><thead><tr><th class="nm" rowspan="2">Athlete</th>`;
+    html += DAYS.map(d=>`<th class="dh" colspan="2">${MON[d.getMonth()].slice(0,3)} ${d.getDate()}</th>`).join("");
+    html += `<th rowspan="2">P</th><th rowspan="2">L</th><th rowspan="2">A</th><th rowspan="2">E</th></tr><tr>`;
+    html += DAYS.map(()=>`<th>AM</th><th>PM</th>`).join("") + `</tr></thead><tbody>`;
+    for (const a of ROSTER[g]){
+      if (a.bib===1) html += `<tr class="cat-row"><td class="nm" style="background:var(--lane)">${a.cat}</td><td colspan="${DAYS.length*2+4}"></td></tr>`;
+      const c={P:0,L:0,A:0,E:0};
+      html += `<tr><td class="nm">${a.bib} ${a.name}</td>`;
+      DAYS.forEach(d=>["AM","PM"].forEach(s=>{
+        const m = getMark(a.id, key(d)+"|"+s);
+        if (m) c[m.s]++;
+        html += `<td class="c ${s==="AM"?"am":""} ${m?"c-"+m.s:""}">${m?m.s:"·"}</td>`;
+      }));
+      html += `<td class="c-P"><b>${c.P}</b></td><td class="c-L"><b>${c.L}</b></td><td class="c-A"><b>${c.A}</b></td><td class="c-E"><b>${c.E}</b></td></tr>`;
+    }
+    html += `</tbody></table></div>`;
+  }
+  $("sumBody").innerHTML = html;
+}
+function renderAll(){ renderHeader(); renderDays(); renderTally(); renderRoster(); renderSummary(); }
+
+/* ---------- Events ---------- */
+$("days").addEventListener("click", e=>{ const b=e.target.closest(".day"); if(!b) return; dayIdx=+b.dataset.i; renderAll(); });
+$("btnAM").onclick = ()=>{ sess="AM"; renderAll(); };
+$("btnPM").onclick = ()=>{ sess="PM"; renderAll(); };
+$("divM").onclick = ()=>{ div="M"; renderTally(); renderRoster(); };
+$("divW").onclick = ()=>{ div="W"; renderTally(); renderRoster(); };
+$("search").oninput = e=>{ query=e.target.value.trim(); renderRoster(); };
+
+function stamp(){ return new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}); }
+$("roster").addEventListener("click", e=>{
+  const b = e.target.closest("button[data-m]"); if(!b || data.locks[sk()]) return;
+  const li = b.closest(".athlete"); const id = li.dataset.id; const k = sk();
+  data.marks[k] = data.marks[k] || {};
+  if (data.marks[k][id] && data.marks[k][id].s === b.dataset.m){ delete data.marks[k][id]; queueOp({t:"mark",k,id,s:null}); }   // tap again to clear
+  else { data.marks[k][id] = { s:b.dataset.m, t:stamp(), at:new Date().toISOString() }; queueOp({t:"mark",k,id,s:b.dataset.m,at:data.marks[k][id].at}); }
+  save(); renderTally(); renderRoster(); renderDays(); renderSummary();
+  const again = document.querySelector(`.athlete[data-id="${CSS.escape(id)}"]`); if (again) again.classList.add("flash");
+});
+$("allPresent").onclick = ()=>{
+  if (data.locks[sk()]) return;
+  const k = sk(); data.marks[k] = data.marks[k] || {};
+  let n=0; ROSTER[div].forEach(a=>{ if(!data.marks[k][a.id]){ const at=new Date().toISOString(); data.marks[k][a.id]={s:"P",t:stamp(),at}; queueOp({t:"mark",k,id:a.id,s:"P",at}); n++; } });
+  save(); renderAll();
+};
+$("lockBtn").onclick = ()=>{ const k=sk(); if (data.locks[k]) delete data.locks[k]; else data.locks[k]=true; queueOp({t:"lock",k,on:!!data.locks[k]}); save(); renderRoster(); };
+$("vMark").onclick = ()=>{ document.body.classList.remove("show-summary"); $("vMark").setAttribute("aria-pressed",true); $("vSum").setAttribute("aria-pressed",false); };
+$("vSum").onclick = ()=>{ renderSummary(); document.body.classList.add("show-summary"); $("vSum").setAttribute("aria-pressed",true); $("vMark").setAttribute("aria-pressed",false); };
+
+/* ---------- Export ---------- */
+const DIVNAME = {M:"Men",W:"Women"};
+const FULL = {P:"Present",L:"Late",A:"Absent",E:"Excused"};
+const cellsFor = a => { const out=[], c={P:0,L:0,A:0,E:0};
+  DAYS.forEach(d=>["AM","PM"].forEach(s=>{ const m=getMark(a.id,key(d)+"|"+s); if(m) c[m.s]++; out.push(m?m.s:""); }));
+  return {out,c}; };
+const dayLabel = d => `${MON[d.getMonth()].slice(0,3)} ${d.getDate()}`;
+const fname = ext => `CCS_TrackField_Attendance_${key(new Date())}.${ext}`;
+function download(blob,name){ const u=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),2000); }
+
+async function exportExcel(){
+  if (!window.ExcelJS){ alert("Excel library did not load. Check that vendor/exceljs.min.js is in the project."); return; }
+  const wb = new ExcelJS.Workbook(); wb.creator = "CCS Track & Field";
+  const MAROON="FF6E1423", GOLD="FFE9B63B", LANE="FFF3E9EA";
+  const COL = {P:"FF1F7A4C",L:"FFC98A0B",A:"FFB3261E",E:"FF3A5BA8"};
+  const thin = {style:"thin",color:{argb:"FFD9C6C9"}};
+  const border = {top:thin,left:thin,bottom:thin,right:thin};
+  for (const g of ["M","W"]){
+    const ws = wb.addWorksheet(DIVNAME[g], {pageSetup:{orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0,paperSize:9}, views:[{state:"frozen",xSplit:3,ySplit:4}]});
+    const nCols = 3 + DAYS.length*2 + 4;
+    ws.mergeCells(1,1,1,nCols);
+    ws.getCell(1,1).value = `CCS College Days 2026 · Track & Field Attendance — ${DIVNAME[g]}`;
+    ws.getCell(1,1).font = {bold:true,size:14,color:{argb:"FFFFFFFF"}};
+    ws.getCell(1,1).fill = {type:"pattern",pattern:"solid",fgColor:{argb:MAROON}};
+    ws.getRow(1).height = 24;
+    ws.mergeCells(2,1,2,nCols);
+    ws.getCell(2,1).value = "Trinidad Municipal College · Sep 29 – Oct 6, 2026 · P Present, L Late, A Absent, E Excused";
+    ws.getCell(2,1).font = {italic:true,size:10};
+    // header rows 3-4
+    const h3 = ws.getRow(3), h4 = ws.getRow(4);
+    [["#",1],["Athlete",2],["Events",3]].forEach(([t,c])=>{ ws.mergeCells(3,c,4,c); h3.getCell(c).value=t; });
+    DAYS.forEach((d,i)=>{ const c=4+i*2; ws.mergeCells(3,c,3,c+1); h3.getCell(c).value=dayLabel(d); h4.getCell(c).value="AM"; h4.getCell(c+1).value="PM"; });
+    ["P","L","A","E"].forEach((t,i)=>{ const c=4+DAYS.length*2+i; ws.mergeCells(3,c,4,c); h3.getCell(c).value=t; });
+    [h3,h4].forEach(r=>{ for(let c=1;c<=nCols;c++){ const cell=r.getCell(c); cell.font={bold:true,color:{argb:"FF3F0A13"}}; cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:GOLD}}; cell.alignment={horizontal:"center",vertical:"middle"}; cell.border=border; } });
+    let r = 5;
+    for (const cat of CATS){
+      ws.mergeCells(r,1,r,nCols);
+      const cc = ws.getCell(r,1); cc.value = cat.toUpperCase();
+      cc.font = {bold:true,color:{argb:MAROON}}; cc.fill={type:"pattern",pattern:"solid",fgColor:{argb:LANE}}; r++;
+      for (const a of ROSTER[g].filter(x=>x.cat===cat)){
+        const {out,c} = cellsFor(a);
+        const row = ws.getRow(r);
+        row.values = [a.bib, a.name, a.ev.join(", "), ...out, c.P, c.L, c.A, c.E];
+        for (let k=1;k<=nCols;k++){ const cell=row.getCell(k); cell.border=border; cell.alignment={horizontal:k===2||k===3?"left":"center",vertical:"middle"}; }
+        out.forEach((v,i)=>{ if(v){ row.getCell(4+i).font={bold:true,color:{argb:COL[v]}}; } });
+        ["P","L","A","E"].forEach((t,i)=> row.getCell(4+DAYS.length*2+i).font={bold:true,color:{argb:COL[t]}});
+        r++;
+      }
+    }
+    ws.getColumn(1).width=5; ws.getColumn(2).width=28; ws.getColumn(3).width=26;
+    for (let c=4;c<4+DAYS.length*2;c++) ws.getColumn(c).width=5;
+    for (let c=4+DAYS.length*2;c<=nCols;c++) ws.getColumn(c).width=5;
+  }
+  const buf = await wb.xlsx.writeBuffer();
+  download(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}), fname("xlsx"));
+}
+
+function exportWord(){
+  const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+  const col = {P:"#1F7A4C",L:"#C98A0B",A:"#B3261E",E:"#3A5BA8"};
+  let body = "";
+  for (const g of ["M","W"]){
+    body += `<h2>${DIVNAME[g]}</h2><table><thead><tr><th rowspan="2">#</th><th rowspan="2">Athlete</th>` +
+      DAYS.map(d=>`<th colspan="2">${dayLabel(d)}</th>`).join("") + `<th rowspan="2">P</th><th rowspan="2">L</th><th rowspan="2">A</th><th rowspan="2">E</th></tr><tr>` +
+      DAYS.map(()=>`<th>AM</th><th>PM</th>`).join("") + `</tr></thead><tbody>`;
+    for (const cat of CATS){
+      body += `<tr><td colspan="${2+DAYS.length*2+4}" class="cat">${cat}</td></tr>`;
+      for (const a of ROSTER[g].filter(x=>x.cat===cat)){
+        const {out,c} = cellsFor(a);
+        body += `<tr><td>${a.bib}</td><td class="nm">${esc(a.name)}</td>` + out.map(v=>`<td style="color:${col[v]||"#999"};font-weight:bold">${v||"-"}</td>`).join("") +
+          ["P","L","A","E"].map(t=>`<td style="color:${col[t]};font-weight:bold">${c[t]}</td>`).join("") + `</tr>`;
+      }
+    }
+    body += `</tbody></table><br style="page-break-before:always">`;
+  }
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><title>CCS Track & Field Attendance</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
+<style>
+@page Section1{size:11.69in 8.27in;mso-page-orientation:landscape;margin:0.5in}
+div.Section1{page:Section1}
+body{font-family:Calibri,Arial,sans-serif;font-size:9pt}
+h1{color:#6E1423;font-size:16pt;margin:0}
+h2{color:#6E1423;font-size:13pt;margin:10pt 0 4pt}
+p.sub{margin:0 0 6pt;color:#555}
+table{border-collapse:collapse;width:100%}
+th{background:#E9B63B;color:#3F0A13;border:1px solid #C9B2B6;padding:2pt;font-size:8pt}
+td{border:1px solid #D9C6C9;padding:2pt;text-align:center;font-size:8pt}
+td.nm{text-align:left;white-space:nowrap}
+td.cat{background:#F3E9EA;color:#6E1423;font-weight:bold;text-align:left;font-size:9pt}
+</style></head><body><div class="Section1">
+<h1>CCS College Days 2026 · Track &amp; Field Attendance</h1>
+<p class="sub">Trinidad Municipal College · Sep 29 – Oct 6, 2026 · P Present, L Late, A Absent, E Excused</p>
+${body}
+<p>Prepared by: ______________________ &nbsp;&nbsp;&nbsp; Noted by: ______________________</p>
+</div></body></html>`;
+  download(new Blob(["\ufeff", html], {type:"application/msword"}), fname("doc"));
+}
+$("expXls").onclick = ()=> exportExcel().catch(e=>alert("Excel export failed: "+e.message));
+$("expDoc").onclick = exportWord;
+
+/* ---------- Backup / Restore ---------- */
+function updateBackupNote(){
+  let t=""; try{ t=localStorage.getItem(STORE+"-lastbackup")||""; }catch(e){}
+  $("backupNote").textContent = t ? "Last backup: "+t : "No backup yet. Tap Backup at the end of each session.";
+}
+$("backupBtn").onclick = ()=>{
+  const payload = {app:"ccs-tf-attendance", version:1, savedAt:new Date().toISOString(), data};
+  download(new Blob([JSON.stringify(payload,null,1)],{type:"application/json"}), `CCS_Attendance_Backup_${key(new Date())}_${new Date().getHours()}${String(new Date().getMinutes()).padStart(2,"0")}.json`);
+  try{ localStorage.setItem(STORE+"-lastbackup", new Date().toLocaleString()); }catch(e){}
+  updateBackupNote();
+};
+$("restoreBtn").onclick = ()=> $("restoreFile").click();
+$("restoreFile").onchange = async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const p = JSON.parse(await f.text());
+    if (p.app!=="ccs-tf-attendance" || !p.data || !p.data.marks) throw new Error("This file is not an attendance backup.");
+    if (!confirm("Replace the current attendance with the backup from "+new Date(p.savedAt).toLocaleString()+"?")) return;
+    data = Object.assign({marks:{},locks:{}}, p.data); queue = {replace:true}; saveQueue(); save(); renderAll(); flush(); alert("Backup restored.");
+  }catch(err){ alert("Restore failed: "+err.message); }
+  e.target.value="";
+};
+// Ask the browser to keep this site's storage (reduces automatic cleanup)
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+
+/* ---------- Supabase sync ---------- */
+const CFG = window.APP_CONFIG || {};
+const hasCloud = !!(window.supabase && CFG.SUPABASE_URL && !/YOUR-/.test(CFG.SUPABASE_URL+CFG.SUPABASE_ANON_KEY));
+const sb = hasCloud ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {auth:{persistSession:true,autoRefreshToken:true}}) : null;
+const QSTORE = STORE+"-queue";
+let queue = {}; try { queue = JSON.parse(localStorage.getItem(QSTORE)||"{}"); } catch(e){}
+const saveQueue = ()=>{ try{ localStorage.setItem(QSTORE, JSON.stringify(queue)); }catch(e){} };
+const pendingCount = ()=> Object.keys(queue).filter(k=>k!=="replace").length + (queue.replace?1:0);
+
+function setSync(st, text){ $("sync").dataset.st = st; $("syncText").textContent = text; }
+function showSync(){
+  if (!sb) return setSync("local","Local only");
+  const n = pendingCount();
+  if (!navigator.onLine) return setSync("off", n ? `Offline · ${n} to upload` : "Offline");
+  setSync(n ? "busy" : "ok", n ? `Saving ${n}…` : "Saved online");
+}
+function queueOp(op){
+  if (!sb) return;
+  queue[op.t==="lock" ? "l|"+op.k : "m|"+op.k+"|"+op.id] = op;   // newest change wins
+  saveQueue(); showSync(); clearTimeout(queueOp._t); queueOp._t = setTimeout(flush, 400);
+}
+let flushing = false;
+async function flush(){
+  if (!sb || flushing || !pendingCount() || !navigator.onLine) { showSync(); return; }
+  flushing = true; showSync();
+  try {
+    if (queue.replace){   // restore from backup: server becomes an exact copy
+      let r = await sb.from("attendance").delete().neq("session_key",""); if (r.error) throw r.error;
+      r = await sb.from("session_locks").delete().neq("session_key",""); if (r.error) throw r.error;
+      const rows = []; for (const [k,m] of Object.entries(data.marks)) for (const [id,v] of Object.entries(m))
+        rows.push({session_key:k, athlete_id:id, status:v.s, marked_at:v.at||new Date().toISOString()});
+      if (rows.length){ r = await sb.from("attendance").upsert(rows,{onConflict:"session_key,athlete_id"}); if (r.error) throw r.error; }
+      const locks = Object.keys(data.locks).map(k=>({session_key:k}));
+      if (locks.length){ r = await sb.from("session_locks").upsert(locks); if (r.error) throw r.error; }
+      queue = {}; saveQueue();
+    }
+    const ops = Object.entries(queue);
+    const ups = ops.filter(([,o])=>o.t==="mark" && o.s);
+    if (ups.length){
+      const r = await sb.from("attendance").upsert(ups.map(([,o])=>({session_key:o.k, athlete_id:o.id, status:o.s, marked_at:o.at})), {onConflict:"session_key,athlete_id"});
+      if (r.error) throw r.error;
+      ups.forEach(([qk,o])=>{ if (queue[qk]===o) delete queue[qk]; }); saveQueue();
+    }
+    for (const [qk,o] of ops.filter(([,o])=>!(o.t==="mark" && o.s))){
+      let r;
+      if (o.t==="mark") r = await sb.from("attendance").delete().eq("session_key",o.k).eq("athlete_id",o.id);
+      else if (o.on) r = await sb.from("session_locks").upsert({session_key:o.k});
+      else r = await sb.from("session_locks").delete().eq("session_key",o.k);
+      if (r.error) throw r.error;
+      if (queue[qk]===o) delete queue[qk]; saveQueue();
+    }
+  } catch(err){
+    console.error(err);
+    if (/JWT|auth|401|permission|row-level/i.test(err.message||"")) setSync("off","Not allowed: check admin email");
+    else setSync("off", `Retrying · ${pendingCount()} to upload`);
+    flushing = false; setTimeout(flush, 15000); return;
+  }
+  flushing = false;
+  if (pendingCount()) flush(); else showSync();
+}
+async function pull(){
+  setSync("busy","Loading…");
+  const [a,l] = await Promise.all([
+    sb.from("attendance").select("session_key,athlete_id,status,marked_at").limit(5000),
+    sb.from("session_locks").select("session_key")
+  ]);
+  if (a.error || l.error){ console.error(a.error||l.error); setSync("off","Could not load: using this phone's copy"); return; }
+  if (queue.replace){ flush(); return; }   // a restore is waiting; keep the local copy
+  const marks = {}, locks = {};
+  for (const r of a.data){ (marks[r.session_key] ||= {})[r.athlete_id] = {s:r.status, at:r.marked_at, t:new Date(r.marked_at).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}; }
+  for (const r of l.data) locks[r.session_key] = true;
+  // First time online with marks made before Supabase? upload them.
+  if (!a.data.length && Object.keys(data.marks).length && !Object.keys(queue).length){ queue = {replace:true}; saveQueue(); flush(); return; }
+  // Re-apply changes that have not uploaded yet
+  for (const o of Object.values(queue)){
+    if (o.t==="mark"){ marks[o.k] ||= {}; if (o.s) marks[o.k][o.id] = {s:o.s, at:o.at, t:new Date(o.at).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}; else delete marks[o.k][o.id]; }
+    else if (o.on) locks[o.k] = true; else delete locks[o.k];
+  }
+  data = {marks, locks}; save(); renderAll(); flush();
+}
+async function startCloud(){
+  if (!sb){ showSync(); return; }
+  $("signOutBtn").hidden = false;
+  const { data:{ session } } = await sb.auth.getSession();
+  if (!session){ document.body.classList.add("need-login"); return; }
+  pull();
+}
+$("loginForm").onsubmit = async e=>{
+  e.preventDefault(); $("loginErr").textContent = ""; $("loginBtn").textContent = "Signing in…";
+  const { error } = await sb.auth.signInWithPassword({ email:$("email").value.trim(), password:$("pw").value });
+  $("loginBtn").textContent = "Sign in";
+  if (error){ $("loginErr").textContent = error.message==="Invalid login credentials" ? "Wrong email or password." : error.message; return; }
+  document.body.classList.remove("need-login"); pull();
+};
+$("signOutBtn").onclick = async ()=>{
+  if (pendingCount() && !confirm(pendingCount()+" change(s) have not uploaded yet. Sign out anyway? They stay on this phone.")) return;
+  await sb.auth.signOut(); document.body.classList.add("need-login");
+};
+window.addEventListener("online", flush);
+window.addEventListener("offline", showSync);
+setInterval(flush, 30000);
+
+function tick(){ $("clock").firstChild.nodeValue = new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}); }
+tick(); setInterval(tick, 20000);
+renderAll(); updateBackupNote(); startCloud();
+document.querySelector('.day[aria-current="true"]')?.scrollIntoView({inline:"center",block:"nearest"});
+</script>
+</body>
+</html>
