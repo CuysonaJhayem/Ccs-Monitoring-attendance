@@ -261,7 +261,8 @@ td.c.am{border-left:1px solid var(--line)}
 
     <div class="tools">
       <input id="search" type="search" placeholder="Search athlete or event" aria-label="Search athlete or event">
-      <button class="btn primary" id="allPresent">Mark rest present</button>
+      <button class="btn primary" id="allPresent">✓ Present all</button>
+      <button class="btn" id="clearAll">✕ Unselect all</button>
       <button class="btn lock" id="lockBtn" aria-pressed="false">Lock session</button>
     </div>
     <div class="locked-note">This session is locked. Unlock it to change any mark.</div>
@@ -305,8 +306,8 @@ const RAW = {
       ["Crencia Fretch Gerald",["400m","4x400m"]], ["Bryan Ore",["400m","4x400m"]],
       ["John Floyd Odiongan",["800m","4x400m"]], ["Mico Pinedo",["800m","4x400m"]],
       ["Joshua Gabriel Garcia",["1500m"]], ["Vincent Gabriel Sebello",["1500m"]],
-      ["Arnel Camlasan",["3000m"]], ["Icy Magcosta",["3000m"]],
-      ["John Kian Empis",["5000m"]], ["Aaron John Cadungon",["5000m"]],
+      ["Arnel Carolasan",["3000m"]], ["Icy Magcosta",["3000m"]],
+      ["John Kian Empis",["5000m"]], ["Aaron John Cadungon",["5000m"]], ["Al Juhn Villahermosa",["5000m"]],
       ["John Michael Valles",["4x100m (R)","4x400m (R)"]]
     ],
     Jumping: [
@@ -341,6 +342,10 @@ const ROSTER = {M:[],W:[]};
 for (const g of ["M","W"]) for (const c of CATS)
   RAW[g][c].forEach(([name,ev],i)=> ROSTER[g].push({name, ev, cat:c, bib:i+1, id:g+":"+name}));
 
+// Renamed athletes: old id -> new id (keeps earlier marks)
+const RENAMES = {"M:Arnel Camlasan":"M:Arnel Carolasan"};
+function migrateMarks(marks){ for (const k in marks) for (const [o,n] of Object.entries(RENAMES)) if (marks[k][o]){ if(!marks[k][n]) marks[k][n]=marks[k][o]; delete marks[k][o]; } return marks; }
+
 /* ---------- Dates: Sep 29 – Oct 6, 2026 ---------- */
 const DAYS = [];
 for (let i=0;i<8;i++){ const d=new Date(2026,8,29+i); DAYS.push(d); }
@@ -352,6 +357,7 @@ const WK = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const STORE = "ccs-tf-attendance-v1";
 let data = { marks:{}, locks:{} };
 try { const s = localStorage.getItem(STORE); if (s) data = Object.assign(data, JSON.parse(s)); } catch(e){}
+migrateMarks(data.marks);
 const save = () => { try { localStorage.setItem(STORE, JSON.stringify(data)); } catch(e){} };
 
 const todayKey = key(new Date());
@@ -466,6 +472,15 @@ $("allPresent").onclick = ()=>{
   if (data.locks[sk()]) return;
   const k = sk(); data.marks[k] = data.marks[k] || {};
   let n=0; ROSTER[div].forEach(a=>{ if(!data.marks[k][a.id]){ const at=new Date().toISOString(); data.marks[k][a.id]={s:"P",t:stamp(),at}; queueOp({t:"mark",k,id:a.id,s:"P",at}); n++; } });
+  save(); renderAll();
+};
+$("clearAll").onclick = ()=>{
+  if (data.locks[sk()]) return;
+  const k = sk(), m = data.marks[k] || {};
+  const ids = ROSTER[div].map(a=>a.id).filter(id=>m[id]);
+  if (!ids.length) return;
+  if (!confirm(`Clear ${ids.length} mark(s) for ${DIVNAME[div]} · ${sess==="AM"?"Morning":"Afternoon"}?`)) return;
+  ids.forEach(id=>{ delete m[id]; queueOp({t:"mark",k,id,s:null}); });
   save(); renderAll();
 };
 $("lockBtn").onclick = ()=>{ const k=sk(); if (data.locks[k]) delete data.locks[k]; else data.locks[k]=true; queueOp({t:"lock",k,on:!!data.locks[k]}); save(); renderRoster(); };
@@ -667,7 +682,8 @@ async function pull(){
   if (a.error || l.error){ console.error(a.error||l.error); setSync("off","Could not load: using this phone's copy"); return; }
   if (queue.replace){ flush(); return; }   // a restore is waiting; keep the local copy
   const marks = {}, locks = {};
-  for (const r of a.data){ (marks[r.session_key] ||= {})[r.athlete_id] = {s:r.status, at:r.marked_at, t:new Date(r.marked_at).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}; }
+  for (const r of a.data){ if (RENAMES[r.athlete_id]){ const nid=RENAMES[r.athlete_id]; queue["m|"+r.session_key+"|"+nid] ||= {t:"mark",k:r.session_key,id:nid,s:r.status,at:r.marked_at}; queue["m|"+r.session_key+"|"+r.athlete_id]={t:"mark",k:r.session_key,id:r.athlete_id,s:null}; saveQueue(); r.athlete_id=nid; }
+    (marks[r.session_key] ||= {})[r.athlete_id] = {s:r.status, at:r.marked_at, t:new Date(r.marked_at).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}; }
   for (const r of l.data) locks[r.session_key] = true;
   // First time online with marks made before Supabase? upload them.
   if (!a.data.length && Object.keys(data.marks).length && !Object.keys(queue).length){ queue = {replace:true}; saveQueue(); flush(); return; }
