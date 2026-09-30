@@ -707,8 +707,14 @@ async function pull(){
   for (const r of a.data){ if (RENAMES[r.athlete_id]){ const nid=RENAMES[r.athlete_id]; queue["m|"+r.session_key+"|"+nid] ||= {t:"mark",k:r.session_key,id:nid,s:r.status,at:r.marked_at}; queue["m|"+r.session_key+"|"+r.athlete_id]={t:"mark",k:r.session_key,id:r.athlete_id,s:null}; saveQueue(); r.athlete_id=nid; }
     (marks[r.session_key] ||= {})[r.athlete_id] = {s:r.status, at:r.marked_at, t:new Date(r.marked_at).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}; }
   for (const r of l.data) locks[r.session_key] = true;
-  // First time online with marks made before Supabase? upload them.
-  if (!a.data.length && Object.keys(data.marks).length && !Object.keys(queue).length){ queue = {replace:true}; saveQueue(); flush(); return; }
+  // First sync on this device: keep and upload any marks that only exist on this phone
+  let seeded = false; try { seeded = localStorage.getItem(STORE+"-seeded")==="1"; } catch(e){}
+  if (!seeded){
+    for (const [k,m] of Object.entries(data.marks)) for (const [id,v] of Object.entries(m))
+      if (!(marks[k] && marks[k][id])) queue["m|"+k+"|"+id] ||= {t:"mark",k,id,s:v.s,at:v.at||new Date().toISOString()};
+    for (const k of Object.keys(data.locks)) if (!locks[k]) queue["l|"+k] ||= {t:"lock",k,on:true};
+    saveQueue(); try { localStorage.setItem(STORE+"-seeded","1"); } catch(e){}
+  }
   // Re-apply changes that have not uploaded yet
   for (const o of Object.values(queue)){
     if (o.t==="mark"){ marks[o.k] ||= {}; if (o.s) marks[o.k][o.id] = {s:o.s, at:o.at, t:new Date(o.at).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}; else delete marks[o.k][o.id]; }
