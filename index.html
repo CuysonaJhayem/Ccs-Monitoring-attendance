@@ -260,7 +260,7 @@ td.c.am{border-left:1px solid var(--line)}
     <div class="tally" id="tally"></div>
 
     <div class="tools">
-      <input id="search" type="search" placeholder="Search athlete or event" aria-label="Search athlete or event">
+      <input id="search" type="search" placeholder="Search name or event (Men + Women)" aria-label="Search athlete or event">
       <button class="btn primary" id="allPresent">✓ Present all</button>
       <button class="btn" id="clearAll">✕ Unselect all</button>
       <button class="btn lock" id="lockBtn" aria-pressed="false">Lock session</button>
@@ -404,16 +404,21 @@ function renderTally(){
 }
 function renderRoster(){
   const q = query.toLowerCase();
-  const list = ROSTER[div].filter(a => !q || a.name.toLowerCase().includes(q) || a.ev.join(" ").toLowerCase().includes(q));
+  // Searching looks in Men AND Women; no search shows the selected division only
+  const pool = q ? [...ROSTER.M, ...ROSTER.W] : ROSTER[div];
+  const list = pool.filter(a => !q || a.name.toLowerCase().includes(q) || a.ev.join(" ").toLowerCase().includes(q));
   const locked = !!data.locks[sk()];
   $("app").classList.toggle("is-locked", locked);
   $("lockBtn").setAttribute("aria-pressed", locked);
   $("lockBtn").textContent = locked ? "Unlock session" : "Lock session";
   if (!list.length){ $("roster").innerHTML = `<p class="empty">No athlete matches “${query}”. Clear the search to see everyone.</p>`; return; }
   const labels = {P:"Present",L:"Late",A:"Absent",E:"Excused"};
-  $("roster").innerHTML = CATS.map(c=>{
-    const rows = list.filter(a=>a.cat===c); if(!rows.length) return "";
-    return `<div class="cat"><b>${c}</b><span>${rows.length} athlete${rows.length>1?"s":""}</span></div><ol class="roster">`+
+  const groups = [];
+  for (const g of (q ? ["M","W"] : [div])) for (const c of CATS) groups.push([g,c]);
+  $("roster").innerHTML = groups.map(([g,c])=>{
+    const rows = list.filter(a=>a.cat===c && a.id.startsWith(g+":")); if(!rows.length) return "";
+    const title = q ? `${g==="M"?"Men":"Women"} · ${c}` : c;
+    return `<div class="cat"><b>${title}</b><span>${rows.length} athlete${rows.length>1?"s":""}</span></div><ol class="roster">`+
     rows.map(a=>{
       const m = getMark(a.id); const s = m ? m.s : "";
       return `<li class="athlete" data-s="${s}" data-id="${a.id}">
