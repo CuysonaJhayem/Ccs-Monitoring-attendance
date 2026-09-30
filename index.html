@@ -189,6 +189,7 @@ main{max-width:880px;margin:0 auto;padding:16px 16px 120px}
 tr.cat-row td{text-align:left;font-family:var(--display);font-weight:800;font-size:15px;background:var(--lane);color:var(--maroon);padding-left:10px}
 .exports{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
 .exports .btn{display:flex;align-items:center;gap:6px}
+.x-abs{background:var(--absent);border-color:var(--absent);color:#fff}
 .x-xls{background:#1D6F42;border-color:#1D6F42;color:#fff}
 .x-doc{background:#2B579A;border-color:#2B579A;color:#fff}
 
@@ -262,6 +263,7 @@ td.c.am{border-left:1px solid var(--line)}
     <div class="tools">
       <input id="search" type="search" placeholder="Search name or event (Men + Women)" aria-label="Search athlete or event">
       <button class="btn primary" id="allPresent">✓ Present all</button>
+      <button class="btn x-abs" id="restAbsent">A · Absent the rest</button>
       <button class="btn" id="clearAll">✕ Unselect all</button>
       <button class="btn lock" id="lockBtn" aria-pressed="false">Lock session</button>
     </div>
@@ -477,6 +479,15 @@ $("allPresent").onclick = ()=>{
   if (data.locks[sk()]) return;
   const k = sk(); data.marks[k] = data.marks[k] || {};
   let n=0; ROSTER[div].forEach(a=>{ if(!data.marks[k][a.id]){ const at=new Date().toISOString(); data.marks[k][a.id]={s:"P",t:stamp(),at}; queueOp({t:"mark",k,id:a.id,s:"P",at}); n++; } });
+  save(); renderAll();
+};
+$("restAbsent").onclick = ()=>{
+  if (data.locks[sk()]) return;
+  const k = sk(); data.marks[k] = data.marks[k] || {};
+  const blank = ROSTER[div].filter(a=>!data.marks[k][a.id]);
+  if (!blank.length){ alert("Everyone already has a mark."); return; }
+  if (!confirm(`Mark ${blank.length} unmarked ${DIVNAME[div]} athlete(s) as Absent?`)) return;
+  blank.forEach(a=>{ const at=new Date().toISOString(); data.marks[k][a.id]={s:"A",t:stamp(),at}; queueOp({t:"mark",k,id:a.id,s:"A",at}); });
   save(); renderAll();
 };
 $("clearAll").onclick = ()=>{
