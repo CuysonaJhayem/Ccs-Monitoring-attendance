@@ -87,7 +87,7 @@ main{max-width:880px;margin:0 auto;padding:16px 16px 120px}
 .day .dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}
 .day .dots i.done{background:var(--present)}
 .day[aria-current="true"]{background:var(--maroon);border-color:var(--maroon);color:#fff}
-.day[aria-current="true"] .n,.day[aria-current="true"] .w{color:var(--gold-soft)}
+.day[aria-current="true"] .n,.day[aria-current="true"] .w{color:#F6DFA4}
 .day.today::after{content:"Today";position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--gold);color:var(--maroon-deep);font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px}
 
 /* division tabs */
@@ -165,7 +165,7 @@ main{max-width:880px;margin:0 auto;padding:16px 16px 120px}
 
 /* sync chip + login */
 .org{justify-content:space-between;flex-wrap:wrap}
-.sync{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#fff;background:rgba(255,255,255,.12);padding:4px 10px;border-radius:999px}
+.sync{max-width:100%;overflow-wrap:anywhere;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#fff;background:rgba(255,255,255,.12);padding:4px 10px;border-radius:999px}
 .sync i{width:8px;height:8px;border-radius:50%;background:#9aa}
 .sync[data-st="ok"] i{background:#3DDC84}.sync[data-st="busy"] i{background:var(--gold)}
 .sync[data-st="off"] i{background:#FF6B5E}.sync[data-st="local"] i{background:#9aa}
@@ -688,7 +688,9 @@ async function flush(){
     }
   } catch(err){
     console.error(err);
-    if (/JWT|auth|401|permission|row-level/i.test(err.message||"")) setSync("off","Not allowed: check admin email");
+    const msg = (err.message||String(err)).slice(0,70);
+    if (/row-level|permission/i.test(msg)) setSync("off","Not allowed · "+msg);
+    else if (/JWT|401|auth/i.test(msg)) setSync("off","Login problem · "+msg);
     else setSync("off", `Retrying · ${pendingCount()} to upload`);
     flushing = false; setTimeout(flush, 15000); return;
   }
@@ -701,7 +703,7 @@ async function pull(){
     sb.from("attendance").select("session_key,athlete_id,status,marked_at").limit(5000),
     sb.from("session_locks").select("session_key")
   ]);
-  if (a.error || l.error){ console.error(a.error||l.error); setSync("off","Could not load: using this phone's copy"); return; }
+  if (a.error || l.error){ const e=a.error||l.error; console.error(e); setSync("off","Could not load · "+(e.message||"").slice(0,60)); return; }
   if (queue.replace){ flush(); return; }   // a restore is waiting; keep the local copy
   const marks = {}, locks = {};
   for (const r of a.data){ if (RENAMES[r.athlete_id]){ const nid=RENAMES[r.athlete_id]; queue["m|"+r.session_key+"|"+nid] ||= {t:"mark",k:r.session_key,id:nid,s:r.status,at:r.marked_at}; queue["m|"+r.session_key+"|"+r.athlete_id]={t:"mark",k:r.session_key,id:r.athlete_id,s:null}; saveQueue(); r.athlete_id=nid; }
