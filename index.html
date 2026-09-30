@@ -627,14 +627,36 @@ function showSync(){
   if (!sb) return setSync("local","Local only");
   const n = pendingCount();
   if (!navigator.onLine) return setSync("off", n ? `Offline · ${n} to upload` : "Offline");
-  setSync(n ? "busy" : "ok", n ? `Saving ${n}…` : "Saved online");
+  setSync(n ? "busy" : "ok", n ? `Saving ${n}…` : (live ? "Live · Saved online" : "Saved online"));
 }
 function queueOp(op){
   if (!sb) return;
   queue[op.t==="lock" ? "l|"+op.k : "m|"+op.k+"|"+op.id] = op;   // newest change wins
   saveQueue(); showSync(); clearTimeout(queueOp._t); queueOp._t = setTimeout(flush, 400);
 }
-let flushing = false;
+let flushing = false, live = false, channel = null, rtTimer = null;
+function rtRender(){ clearTimeout(rtTimer); rtTimer = setTimeout(()=>{ save(); renderTally(); renderRoster(); renderDays(); renderSummary(); }, 150); }
+function startRealtime(){
+  if (!sb || channel) return;
+  channel = sb.channel("attendance-live")
+    .on("postgres_changes", {event:"*", schema:"public", table:"attendance"}, p=>{
+      const r = p.eventType==="DELETE" ? p.old : p.new; if (!r || !r.session_key) return;
+      const id = RENAMES[r.athlete_id] || r.athlete_id;
+      if (queue["m|"+r.session_key+"|"+id] || queue.replace) return;   // this phone has a newer change
+      if (p.eventType==="DELETE"){ if (data.marks[r.session_key]) delete data.marks[r.session_key][id]; }
+      else (data.marks[r.session_key] ||= {})[id] = {s:r.status, at:r.marked_at, t:new Date(r.marked_at).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})};
+      rtRender();
+    })
+    .on("postgres_changes", {event:"*", schema:"public", table:"session_locks"}, p=>{
+      const r = p.eventType==="DELETE" ? p.old : p.new; if (!r || !r.session_key || queue["l|"+r.session_key]) return;
+      if (p.eventType==="DELETE") delete data.locks[r.session_key]; else data.locks[r.session_key] = true;
+      rtRender();
+    })
+    .subscribe(st=>{
+      const was = live; live = st==="SUBSCRIBED"; showSync();
+      if (live && !was && pull.done) pull();   // reconnected: catch anything missed
+    });
+}
 async function flush(){
   if (!sb || flushing || !pendingCount() || !navigator.onLine) { showSync(); return; }
   flushing = true; showSync();
@@ -693,6 +715,7 @@ async function pull(){
     else if (o.on) locks[o.k] = true; else delete locks[o.k];
   }
   data = {marks, locks}; save(); renderAll(); flush();
+  pull.done = true; startRealtime();
 }
 async function startCloud(){
   if (!sb){ showSync(); return; }
@@ -710,9 +733,14 @@ $("loginForm").onsubmit = async e=>{
 };
 $("signOutBtn").onclick = async ()=>{
   if (pendingCount() && !confirm(pendingCount()+" change(s) have not uploaded yet. Sign out anyway? They stay on this phone.")) return;
+  if (channel){ sb.removeChannel(channel); channel = null; live = false; }
   await sb.auth.signOut(); document.body.classList.add("need-login");
 };
 window.addEventListener("online", flush);
+document.addEventListener("visibilitychange", async ()=>{
+  if (document.visibilityState!=="visible" || !sb || !pull.done) return;
+  const { data:{ session } } = await sb.auth.getSession(); if (session) pull();   // back to the app: refresh
+});
 window.addEventListener("offline", showSync);
 setInterval(flush, 30000);
 
